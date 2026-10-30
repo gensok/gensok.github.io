@@ -1,5 +1,6 @@
 // Tasks are saved in the browser (localStorage), so they're still there after a refresh.
-// Each task: { text, dueDate, completed, color }
+// Each task: { text, dueDate, completed, color }. The saved list's order is the order on screen.
+// Rename: the Rename button (or Enter) edits a task's text. Reorder: drag a task by its ⠿ handle.
 
 const STORAGE_KEY = 'gens-todo-tasks';
 
@@ -28,10 +29,19 @@ window.addEventListener('load', () => {
 	const completedSound = document.getElementById("completed-sound");
 
 	const tasks = loadTasks();
+	const taskOf = new WeakMap(); // task element -> its task object
 
 	function renderTask(task) {
 		const task_el = document.createElement('div');
 		task_el.classList.add('task');
+		taskOf.set(task_el, task);
+
+		// drag handle: grab here to move the task up or down the list
+		const handle_el = document.createElement('span');
+		handle_el.classList.add('drag-handle');
+		handle_el.innerText = '⠿';
+		handle_el.title = 'Drag to reorder';
+		task_el.appendChild(handle_el);
 		if (task.color) {
 			task_el.style.backgroundColor = task.color;
 		}
@@ -69,11 +79,16 @@ window.addEventListener('load', () => {
 			saveTasks(tasks);
 		});
 
+		const task_rename_el = document.createElement('button');
+		task_rename_el.classList.add('rename');
+		task_rename_el.innerText = 'Rename';
+
 		const task_delete_el = document.createElement('button');
 		task_delete_el.classList.add('delete');
 		task_delete_el.innerText = 'Delete';
 
 		task_actions_el.appendChild(task_edit_el);
+		task_actions_el.appendChild(task_rename_el);
 		task_actions_el.appendChild(task_delete_el);
 		task_actions_el.appendChild(task_color_el);
 
@@ -103,6 +118,47 @@ window.addEventListener('load', () => {
 			saveTasks(tasks);
 		});
 
+		// rename ---------------------------------------------------------------
+		let renaming = false;
+		function startRename() {
+			renaming = true;
+			task_input_el.removeAttribute('readonly');
+			task_input_el.focus();
+			task_input_el.select();
+			task_rename_el.innerText = 'Save';
+		}
+		function finishRename() {
+			if (!renaming) return;
+			renaming = false;
+			const newText = task_input_el.value.trim();
+			if (newText === '') {
+				task_input_el.value = task.text; // empty name: keep the old one
+			} else {
+				task.text = newText;
+				task_input_el.value = newText;
+				saveTasks(tasks);
+			}
+			task_input_el.setAttribute('readonly', 'readonly');
+			task_rename_el.innerText = 'Rename';
+		}
+		// keep the text box focused when the Save button is pressed (so blur doesn't fire first)
+		task_rename_el.addEventListener('pointerdown', (e) => {
+			if (renaming) e.preventDefault();
+		});
+		task_rename_el.addEventListener('click', () => {
+			if (renaming) finishRename(); else startRename();
+		});
+		task_input_el.addEventListener('keydown', (e) => {
+			if (!renaming) return;
+			if (e.key === 'Enter') {
+				finishRename();
+			} else if (e.key === 'Escape') {
+				task_input_el.value = task.text; // cancel
+				finishRename();
+			}
+		});
+		task_input_el.addEventListener('blur', finishRename);
+
 		task_delete_el.addEventListener('click', () => {
 			list_el.removeChild(task_el);
 			const index = tasks.indexOf(task);
@@ -115,6 +171,26 @@ window.addEventListener('load', () => {
 
 	// put back everything that was saved
 	tasks.forEach(renderTask);
+
+	// drag to reorder (SortableJS: works with a mouse and on touch screens)
+	if (window.Sortable) {
+		Sortable.create(list_el, {
+			handle: '.drag-handle',
+			animation: 150,
+			ghostClass: 'task-ghost',
+			onEnd: () => {
+				// the saved order follows the order on screen
+				const ordered = [];
+				list_el.querySelectorAll('.task').forEach((el) => {
+					const t = taskOf.get(el);
+					if (t) ordered.push(t);
+				});
+				tasks.length = 0;
+				tasks.push(...ordered);
+				saveTasks(tasks);
+			},
+		});
+	}
 
 	form.addEventListener('submit', (e) => {
 		e.preventDefault();
