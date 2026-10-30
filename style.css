@@ -191,3 +191,11 @@ main {
 #tasks .task.task-ghost {
 	opacity: 0.4;
 }
+
+/* while renaming: a grey box around the text being edited */
+#tasks .task .content .text:not(:read-only) {
+	box-shadow: 0 0 0 3px #6b7280; /* grey bar around it (follows the rounded corners) */
+	border-radius: 0.4rem;
+	padding: 0.1rem 0.4rem;
+	background-color: rgba(31, 41, 55, 0.45);
+}
